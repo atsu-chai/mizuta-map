@@ -3,38 +3,11 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultCenter, demoPuddles, normalizePuddles, sizeLabel, type Puddle } from "@/lib/puddles";
 
-type GoogleMap = {
-  setCenter: (position: LatLng) => void;
-  setZoom: (zoom: number) => void;
-};
-
 type LatLng = {
   lat: number;
   lng: number;
 };
 
-type GoogleMarker = {
-  setMap: (map: GoogleMap | null) => void;
-  addListener: (eventName: string, handler: () => void) => void;
-};
-
-type GoogleMapsApi = {
-  maps: {
-    Map: new (element: HTMLElement, options: Record<string, unknown>) => GoogleMap;
-    Marker: new (options: Record<string, unknown>) => GoogleMarker;
-    LatLngBounds: new () => {
-      extend: (position: LatLng) => void;
-    };
-  };
-};
-
-declare global {
-  interface Window {
-    google?: GoogleMapsApi;
-  }
-}
-
-const mapApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 const gasWebAppUrl = process.env.NEXT_PUBLIC_GAS_WEB_APP_URL;
 const storageKey = "mizuta-map-puddles";
 
@@ -45,11 +18,6 @@ export function MizutaMapApp() {
   const [status, setStatus] = useState("水たまりデータを読み込み中...");
   const [submitStatus, setSubmitStatus] = useState("");
   const [showAr, setShowAr] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
-  const [mapError, setMapError] = useState(mapApiKey ? "" : "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY が未設定です。");
-  const mapElementRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<GoogleMap | null>(null);
-  const markersRef = useRef<GoogleMarker[]>([]);
 
   const visiblePuddles = puddles.length > 0 ? puddles : demoPuddles;
 
@@ -87,7 +55,6 @@ export function MizutaMapApp() {
           lng: result.coords.longitude,
         };
         setPosition(nextPosition);
-        mapRef.current?.setCenter(nextPosition);
       },
       () => {
         setStatus((current) => `${current} 現在地は許可されていないため東京駅周辺を表示します。`);
@@ -96,71 +63,12 @@ export function MizutaMapApp() {
     );
   }, []);
 
-  useEffect(() => {
-    if (!mapApiKey) {
-      return;
-    }
-
-    if (window.google?.maps) {
-      window.setTimeout(() => setMapReady(true), 0);
-      return;
-    }
-
-    const existingScript = document.querySelector<HTMLScriptElement>("script[data-google-maps]");
-    if (existingScript) {
-      existingScript.addEventListener("load", () => setMapReady(true), { once: true });
-      existingScript.addEventListener("error", () => setMapError("Google Mapsを読み込めませんでした。"), {
-        once: true,
-      });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(mapApiKey)}`;
-    script.async = true;
-    script.defer = true;
-    script.dataset.googleMaps = "true";
-    script.addEventListener("load", () => setMapReady(true), { once: true });
-    script.addEventListener("error", () => setMapError("Google Mapsを読み込めませんでした。"), {
-      once: true,
-    });
-    document.head.appendChild(script);
-  }, []);
-
-  useEffect(() => {
-    if (!mapReady || !mapElementRef.current || !window.google?.maps) {
-      return;
-    }
-
-    if (!mapRef.current) {
-      mapRef.current = new window.google.maps.Map(mapElementRef.current, {
-        center: position,
-        zoom: 15,
-        mapTypeControl: false,
-        fullscreenControl: false,
-        streetViewControl: false,
-      });
-    }
-
-    markersRef.current.forEach((marker) => marker.setMap(null));
-    markersRef.current = visiblePuddles.map((puddle) => {
-      const marker = new window.google!.maps.Marker({
-        position: { lat: puddle.latitude, lng: puddle.longitude },
-        map: mapRef.current,
-        title: `水たまり ${sizeLabel(puddle.size)}`,
-      });
-      marker.addListener("click", () => setSelectedPuddle(puddle));
-
-      return marker;
-    });
-  }, [mapReady, position, visiblePuddles]);
-
   const selectedMapLink = useMemo(() => {
     if (!selectedPuddle) {
       return "";
     }
 
-    return `https://www.google.com/maps/search/?api=1&query=${selectedPuddle.latitude},${selectedPuddle.longitude}`;
+    return `https://www.openstreetmap.org/?mlat=${selectedPuddle.latitude}&mlon=${selectedPuddle.longitude}#map=18/${selectedPuddle.latitude}/${selectedPuddle.longitude}`;
   }, [selectedPuddle]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -207,7 +115,7 @@ export function MizutaMapApp() {
             <p className="text-sm font-semibold text-[#237a92]">Mizuta Map</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">水たまりに向かう、避ける、記録する。</h1>
             <p className="mt-3 text-sm leading-6 text-[#486575]">
-              現在地の近くにある水たまりを共有し、写真・大きさ・レビュー・天気を集めるGitHub Pages対応MVPです。
+              APIキーなしの地図で水たまりを共有し、写真・大きさ・レビューを端末に保存するGitHub Pages対応MVPです。
             </p>
           </header>
 
@@ -271,17 +179,18 @@ export function MizutaMapApp() {
             onClick={() => setShowAr(true)}
             className="rounded-lg border border-[#78bfd0] bg-[#dff6fb] px-4 py-3 text-sm font-semibold text-[#0d5268] transition hover:bg-[#caeef6]"
           >
-            魚を泳がせるARを開く
+            水面検出ARを開く
           </button>
         </aside>
 
         <section className="grid min-h-[720px] gap-4 lg:grid-rows-[1fr_auto]">
           <div className="relative min-h-[420px] overflow-hidden rounded-lg border border-[#c9e3ee] bg-[#d9edf4] shadow-sm">
-            {mapApiKey && !mapError ? (
-              <div ref={mapElementRef} className="absolute inset-0" aria-label="Google Maps" />
-            ) : (
-              <FallbackMap position={position} puddles={visiblePuddles} message={mapError} />
-            )}
+            <OpenStreetMapView
+              center={position}
+              puddles={visiblePuddles}
+              selectedId={selectedPuddle?.id}
+              onSelect={setSelectedPuddle}
+            />
             <div className="absolute left-4 top-4 max-w-sm rounded-lg bg-white/95 p-3 text-sm shadow">
               <p className="font-semibold">地図ステータス</p>
               <p className="mt-1 text-[#486575]">{status}</p>
@@ -316,7 +225,7 @@ export function MizutaMapApp() {
                     rel="noreferrer"
                     className="block rounded-md bg-[#126782] px-4 py-3 text-center font-semibold text-white"
                   >
-                    Google Mapsで開く
+                    OpenStreetMapで開く
                   </a>
                 </div>
               ) : (
@@ -334,37 +243,85 @@ export function MizutaMapApp() {
   );
 }
 
-function FallbackMap({
-  position,
+function OpenStreetMapView({
+  center,
   puddles,
-  message,
+  selectedId,
+  onSelect,
 }: {
-  position: LatLng;
+  center: LatLng;
   puddles: Puddle[];
-  message: string;
+  selectedId?: string;
+  onSelect: (puddle: Puddle) => void;
 }) {
+  const [zoom, setZoom] = useState(16);
+  const tiles = useMemo(() => buildTiles(center, zoom), [center, zoom]);
+  const centerPoint = useMemo(() => latLngToPixel(center.lat, center.lng, zoom), [center, zoom]);
+
   return (
-    <div className="absolute inset-0 bg-[linear-gradient(90deg,#c7e2ea_1px,transparent_1px),linear-gradient(#c7e2ea_1px,transparent_1px)] bg-[size:48px_48px]">
-      <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-[#126782] shadow-lg" />
-      {puddles.map((puddle, index) => (
-        <div
-          key={puddle.id}
-          className="absolute h-8 w-8 rounded-full border-2 border-white bg-[#2aa7c8] text-center text-xs font-bold leading-7 text-white shadow"
-          style={{
-            left: `${28 + index * 18}%`,
-            top: `${35 + (index % 2) * 22}%`,
-          }}
-          title={`${puddle.latitude}, ${puddle.longitude}`}
-        >
-          {sizeLabel(puddle.size)}
-        </div>
-      ))}
-      <div className="absolute bottom-4 left-4 right-4 rounded-lg bg-white/95 p-4 text-sm text-[#486575] shadow">
-        <p className="font-semibold text-[#102033]">Google Maps未接続</p>
-        <p className="mt-1">{message || "APIキーを設定すると実地図に切り替わります。"}</p>
-        <p className="mt-2 font-mono text-xs">
-          center {position.lat.toFixed(5)}, {position.lng.toFixed(5)}
+    <div className="absolute inset-0 overflow-hidden bg-[#cfe5ed]">
+      <div className="absolute left-1/2 top-1/2 h-[768px] w-[768px] -translate-x-1/2 -translate-y-1/2">
+        {tiles.map((tile) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={`${tile.x}-${tile.y}-${tile.z}`}
+            src={`https://tile.openstreetmap.org/${tile.z}/${tile.x}/${tile.y}.png`}
+            alt=""
+            className="absolute h-64 w-64 select-none"
+            draggable={false}
+            style={{ left: tile.left, top: tile.top }}
+          />
+        ))}
+      </div>
+
+      <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-[#0d5268] shadow-lg" />
+      <span className="absolute left-1/2 top-[calc(50%+16px)] -translate-x-1/2 rounded-full bg-white/90 px-2 py-1 text-xs font-semibold shadow">
+        現在地
+      </span>
+
+      {puddles.map((puddle) => {
+        const point = latLngToPixel(puddle.latitude, puddle.longitude, zoom);
+        const left = 50 + ((point.x - centerPoint.x) / 768) * 100;
+        const top = 50 + ((point.y - centerPoint.y) / 768) * 100;
+        const isSelected = selectedId === puddle.id;
+
+        return (
+          <button
+            key={puddle.id}
+            type="button"
+            onClick={() => onSelect(puddle)}
+            className={`absolute h-9 w-9 -translate-x-1/2 -translate-y-full rounded-full border-2 text-xs font-bold text-white shadow-lg transition ${
+              isSelected ? "scale-110 border-[#102033] bg-[#ff8a00]" : "border-white bg-[#2aa7c8]"
+            }`}
+            style={{ left: `${left}%`, top: `${top}%` }}
+            title={`${puddle.latitude}, ${puddle.longitude}`}
+          >
+            {sizeLabel(puddle.size)}
+          </button>
+        );
+      })}
+
+      <div className="absolute bottom-4 left-4 rounded-lg bg-white/95 p-3 text-xs text-[#486575] shadow">
+        <p className="font-semibold text-[#102033]">OpenStreetMap</p>
+        <p className="mt-1 font-mono">
+          {center.lat.toFixed(5)}, {center.lng.toFixed(5)} / z{zoom}
         </p>
+      </div>
+      <div className="absolute bottom-4 right-4 flex overflow-hidden rounded-md bg-white shadow">
+        <button
+          type="button"
+          onClick={() => setZoom((current) => Math.min(current + 1, 18))}
+          className="border-r border-[#d7e8ee] px-3 py-2 text-lg font-semibold"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={() => setZoom((current) => Math.max(current - 1, 12))}
+          className="px-3 py-2 text-lg font-semibold"
+        >
+          -
+        </button>
       </div>
     </div>
   );
@@ -425,10 +382,13 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function ArOverlay({ onClose }: { onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [cameraStatus, setCameraStatus] = useState("カメラを起動しています...");
+  const [waterTarget, setWaterTarget] = useState({ detected: false, x: 50, y: 58, confidence: 0 });
 
   useEffect(() => {
     let stream: MediaStream | null = null;
+    let frameId = 0;
 
     async function startCamera() {
       try {
@@ -440,15 +400,81 @@ function ArOverlay({ onClose }: { onClose: () => void }) {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           setCameraStatus("");
+          frameId = window.requestAnimationFrame(scanForWater);
         }
       } catch {
         setCameraStatus("カメラを使用できません。ブラウザの権限設定を確認してください。");
       }
     }
 
+    function scanForWater() {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+
+      if (!video || !canvas || video.readyState < 2) {
+        frameId = window.requestAnimationFrame(scanForWater);
+        return;
+      }
+
+      const width = 96;
+      const height = 128;
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+
+      if (!context) {
+        frameId = window.requestAnimationFrame(scanForWater);
+        return;
+      }
+
+      context.drawImage(video, 0, 0, width, height);
+      const pixels = context.getImageData(0, 0, width, height).data;
+      let totalWeight = 0;
+      let weightedX = 0;
+      let weightedY = 0;
+
+      for (let y = Math.floor(height * 0.35); y < height; y += 2) {
+        for (let x = 0; x < width; x += 2) {
+          const index = (y * width + x) * 4;
+          const red = pixels[index];
+          const green = pixels[index + 1];
+          const blue = pixels[index + 2];
+          const brightness = (red + green + blue) / 3;
+          const blueWater = blue > red + 8 && blue > green - 10 && brightness > 35;
+          const darkReflection = brightness > 25 && brightness < 95 && Math.abs(red - green) < 28 && Math.abs(green - blue) < 38;
+          const glossyHighlight = brightness > 150 && blue >= red - 8 && green >= red - 12;
+
+          if (blueWater || darkReflection || glossyHighlight) {
+            const lowerFrameBias = 1 + y / height;
+            const weight = lowerFrameBias * (blueWater ? 2.2 : glossyHighlight ? 1.1 : 1.5);
+            totalWeight += weight;
+            weightedX += x * weight;
+            weightedY += y * weight;
+          }
+        }
+      }
+
+      if (totalWeight > 90) {
+        setWaterTarget({
+          detected: true,
+          x: (weightedX / totalWeight / width) * 100,
+          y: (weightedY / totalWeight / height) * 100,
+          confidence: Math.min(99, Math.round(totalWeight / 12)),
+        });
+      } else {
+        setWaterTarget((current) => ({ ...current, detected: false, confidence: 0 }));
+      }
+
+      frameId = window.setTimeout(() => {
+        frameId = window.requestAnimationFrame(scanForWater);
+      }, 120);
+    }
+
     void startCamera();
 
     return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(frameId);
       stream?.getTracks().forEach((track) => track.stop());
     };
   }, []);
@@ -456,15 +482,25 @@ function ArOverlay({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 bg-[#07131d] text-white">
       <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+      <canvas ref={canvasRef} className="hidden" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent,rgba(4,16,24,0.4))]" />
-      <div className="fish-swim absolute left-0 top-1/2 text-6xl drop-shadow-lg" aria-hidden>
-        &gt;&lt;&gt;
-      </div>
+      {waterTarget.detected ? (
+        <div
+          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 text-6xl drop-shadow-lg transition-all duration-300"
+          style={{ left: `${waterTarget.x}%`, top: `${waterTarget.y}%` }}
+          aria-hidden
+        >
+          <span className="fish-swim block">&gt;&lt;&gt;</span>
+        </div>
+      ) : null}
       <div className="absolute left-4 right-4 top-4 flex items-start justify-between gap-4">
         <div className="rounded-lg bg-black/55 p-4 backdrop-blur">
-          <p className="text-sm font-semibold">Mizuta AR</p>
+          <p className="text-sm font-semibold">Mizuta AR 水面検出</p>
           <p className="mt-1 max-w-sm text-sm text-white/80">
-            カメラ映像に魚を重ねています。水たまりの上で魚が泳ぐ簡易WebARです。
+            カメラ映像から水面らしい暗い反射・青み・ハイライトを探し、検出位置に魚を表示します。
+          </p>
+          <p className="mt-2 text-sm text-[#9ee8ff]">
+            {waterTarget.detected ? `水面候補を検出中: ${waterTarget.confidence}%` : "水面候補を探しています。水たまりを画面下半分に入れてください。"}
           </p>
           {cameraStatus ? <p className="mt-2 text-sm text-[#9ee8ff]">{cameraStatus}</p> : null}
         </div>
@@ -478,6 +514,59 @@ function ArOverlay({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
+}
+
+function buildTiles(center: LatLng, zoom: number) {
+  const centerTile = latLngToTile(center.lat, center.lng, zoom);
+  const centerPixel = latLngToPixel(center.lat, center.lng, zoom);
+  const centerTilePixel = {
+    x: centerTile.x * 256,
+    y: centerTile.y * 256,
+  };
+  const offset = {
+    x: centerPixel.x - centerTilePixel.x,
+    y: centerPixel.y - centerTilePixel.y,
+  };
+  const tiles = [];
+
+  for (let row = -1; row <= 1; row += 1) {
+    for (let column = -1; column <= 1; column += 1) {
+      tiles.push({
+        x: centerTile.x + column,
+        y: centerTile.y + row,
+        z: zoom,
+        left: 256 + column * 256 - offset.x,
+        top: 256 + row * 256 - offset.y,
+      });
+    }
+  }
+
+  return tiles;
+}
+
+function latLngToTile(lat: number, lng: number, zoom: number) {
+  const scale = 2 ** zoom;
+  const x = Math.floor(((lng + 180) / 360) * scale);
+  const y = Math.floor(
+    ((1 - Math.log(Math.tan(toRadians(lat)) + 1 / Math.cos(toRadians(lat))) / Math.PI) / 2) * scale,
+  );
+
+  return { x, y };
+}
+
+function latLngToPixel(lat: number, lng: number, zoom: number) {
+  const scale = 256 * 2 ** zoom;
+
+  return {
+    x: ((lng + 180) / 360) * scale,
+    y:
+      ((1 - Math.log(Math.tan(toRadians(lat)) + 1 / Math.cos(toRadians(lat))) / Math.PI) / 2) *
+      scale,
+  };
+}
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
 }
 
 function formatDate(value: string) {

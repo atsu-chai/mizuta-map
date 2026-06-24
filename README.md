@@ -4,20 +4,18 @@
 
 ## 機能
 
-- Google Maps JavaScript APIによる地図表示
+- APIキー不要のOpenStreetMapタイル表示
 - ブラウザ現在地取得
 - 水たまり投稿フォーム
 - ブラウザ内保存による投稿データ表示
 - `NEXT_PUBLIC_GAS_WEB_APP_URL` 設定時のGAS直接送信
-- APIキー未設定でも壊れないフォールバック表示
-- スマホカメラに魚を重ねる簡易WebAR
+- カメラ映像から水面候補を検出し、検出位置に魚を重ねる簡易WebAR
 
 ## 環境変数
 
 `.env.example` を参考に `.env.local` またはVercelのEnvironment Variablesへ設定してください。
 
 ```bash
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
 NEXT_PUBLIC_GAS_WEB_APP_URL=
 WEATHER_API_KEY=
 NEXT_PUBLIC_DEFAULT_LAT=35.681236
@@ -58,7 +56,6 @@ npm run build
 
 `.github/workflows/pages.yml` が `main` ブランチへのpushで静的サイトをビルドし、GitHub Pagesへデプロイします。
 
-GitHubリポジトリの Settings → Pages で Source を `GitHub Actions` にしてください。Google MapsやGASを使う場合は、Settings → Secrets and variables → Actions に次を登録してください。
+GitHubリポジトリの Settings → Pages で Source を `GitHub Actions` にしてください。GASを使う場合は、Settings → Secrets and variables → Actions に次を登録してください。
 
-- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
 - `NEXT_PUBLIC_GAS_WEB_APP_URL`
