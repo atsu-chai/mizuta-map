@@ -185,7 +185,7 @@ export function MizutaMapApp() {
 
         <section className="grid min-h-[720px] gap-4 lg:grid-rows-[1fr_auto]">
           <div className="relative min-h-[420px] overflow-hidden rounded-lg border border-[#c9e3ee] bg-[#d9edf4] shadow-sm">
-            <LocalMapView
+            <OpenStreetMapView
               center={position}
               puddles={visiblePuddles}
               selectedId={selectedPuddle?.id}
@@ -243,7 +243,7 @@ export function MizutaMapApp() {
   );
 }
 
-function LocalMapView({
+function OpenStreetMapView({
   center,
   puddles,
   selectedId,
@@ -256,17 +256,30 @@ function LocalMapView({
 }) {
   const [zoom, setZoom] = useState(16);
   const meterRange = zoom === 18 ? 320 : zoom === 17 ? 520 : zoom === 16 ? 850 : 1400;
+  const osmEmbedUrl = useMemo(() => {
+    const delta = zoom === 18 ? 0.002 : zoom === 17 ? 0.004 : zoom === 16 ? 0.007 : 0.012;
+    const bbox = [
+      center.lng - delta,
+      center.lat - delta,
+      center.lng + delta,
+      center.lat + delta,
+    ].join(",");
+
+    return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(
+      bbox,
+    )}&layer=mapnik&marker=${encodeURIComponent(`${center.lat},${center.lng}`)}`;
+  }, [center, zoom]);
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#d9eef4]">
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(35,122,146,0.12)_1px,transparent_1px),linear-gradient(rgba(35,122,146,0.12)_1px,transparent_1px)] bg-[size:56px_56px]" />
-      <div className="absolute left-[-8%] top-[22%] h-8 w-[116%] rotate-[-8deg] rounded-full bg-white/90 shadow-sm" />
-      <div className="absolute left-[-12%] top-[61%] h-10 w-[124%] rotate-[5deg] rounded-full bg-white/90 shadow-sm" />
-      <div className="absolute left-[18%] top-[-12%] h-[124%] w-9 rotate-[12deg] rounded-full bg-white/90 shadow-sm" />
-      <div className="absolute left-[66%] top-[-10%] h-[120%] w-7 rotate-[-10deg] rounded-full bg-white/90 shadow-sm" />
-      <div className="absolute left-[8%] top-[10%] h-28 w-40 rounded-[42%] bg-[#a8d7e4]/70 blur-[1px]" />
-      <div className="absolute bottom-[12%] right-[10%] h-36 w-52 rounded-[45%] bg-[#a8d7e4]/70 blur-[1px]" />
-      <div className="absolute left-[42%] top-[38%] h-24 w-32 rounded-[50%] bg-[#bde6ee]/70 blur-[1px]" />
+      <iframe
+        key={osmEmbedUrl}
+        src={osmEmbedUrl}
+        title="OpenStreetMap"
+        className="absolute inset-0 h-full w-full border-0"
+        loading="eager"
+      />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-[#102033]/10" />
 
       <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-[#0d5268] shadow-lg" />
       <span className="absolute left-1/2 top-[calc(50%+16px)] -translate-x-1/2 rounded-full bg-white/90 px-2 py-1 text-xs font-semibold shadow">
@@ -294,7 +307,7 @@ function LocalMapView({
       })}
 
       <div className="absolute bottom-4 left-4 rounded-lg bg-white/95 p-3 text-xs text-[#486575] shadow">
-        <p className="font-semibold text-[#102033]">Mizuta Local Map v2</p>
+        <p className="font-semibold text-[#102033]">OpenStreetMap</p>
         <p className="mt-1 font-mono">
           {center.lat.toFixed(5)}, {center.lng.toFixed(5)} / {meterRange}m
         </p>
