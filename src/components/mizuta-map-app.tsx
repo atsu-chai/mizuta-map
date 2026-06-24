@@ -185,7 +185,7 @@ export function MizutaMapApp() {
 
         <section className="grid min-h-[720px] gap-4 lg:grid-rows-[1fr_auto]">
           <div className="relative min-h-[420px] overflow-hidden rounded-lg border border-[#c9e3ee] bg-[#d9edf4] shadow-sm">
-            <OpenStreetMapView
+            <LocalMapView
               center={position}
               puddles={visiblePuddles}
               selectedId={selectedPuddle?.id}
@@ -243,7 +243,7 @@ export function MizutaMapApp() {
   );
 }
 
-function OpenStreetMapView({
+function LocalMapView({
   center,
   puddles,
   selectedId,
@@ -255,24 +255,18 @@ function OpenStreetMapView({
   onSelect: (puddle: Puddle) => void;
 }) {
   const [zoom, setZoom] = useState(16);
-  const tiles = useMemo(() => buildTiles(center, zoom), [center, zoom]);
-  const centerPoint = useMemo(() => latLngToPixel(center.lat, center.lng, zoom), [center, zoom]);
+  const meterRange = zoom === 18 ? 320 : zoom === 17 ? 520 : zoom === 16 ? 850 : 1400;
 
   return (
-    <div className="absolute inset-0 overflow-hidden bg-[#cfe5ed]">
-      <div className="absolute left-1/2 top-1/2 h-[768px] w-[768px] -translate-x-1/2 -translate-y-1/2">
-        {tiles.map((tile) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={`${tile.x}-${tile.y}-${tile.z}`}
-            src={`https://tile.openstreetmap.org/${tile.z}/${tile.x}/${tile.y}.png`}
-            alt=""
-            className="absolute h-64 w-64 select-none"
-            draggable={false}
-            style={{ left: tile.left, top: tile.top }}
-          />
-        ))}
-      </div>
+    <div className="absolute inset-0 overflow-hidden bg-[#d9eef4]">
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(35,122,146,0.12)_1px,transparent_1px),linear-gradient(rgba(35,122,146,0.12)_1px,transparent_1px)] bg-[size:56px_56px]" />
+      <div className="absolute left-[-8%] top-[22%] h-8 w-[116%] rotate-[-8deg] rounded-full bg-white/90 shadow-sm" />
+      <div className="absolute left-[-12%] top-[61%] h-10 w-[124%] rotate-[5deg] rounded-full bg-white/90 shadow-sm" />
+      <div className="absolute left-[18%] top-[-12%] h-[124%] w-9 rotate-[12deg] rounded-full bg-white/90 shadow-sm" />
+      <div className="absolute left-[66%] top-[-10%] h-[120%] w-7 rotate-[-10deg] rounded-full bg-white/90 shadow-sm" />
+      <div className="absolute left-[8%] top-[10%] h-28 w-40 rounded-[42%] bg-[#a8d7e4]/70 blur-[1px]" />
+      <div className="absolute bottom-[12%] right-[10%] h-36 w-52 rounded-[45%] bg-[#a8d7e4]/70 blur-[1px]" />
+      <div className="absolute left-[42%] top-[38%] h-24 w-32 rounded-[50%] bg-[#bde6ee]/70 blur-[1px]" />
 
       <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-[#0d5268] shadow-lg" />
       <span className="absolute left-1/2 top-[calc(50%+16px)] -translate-x-1/2 rounded-full bg-white/90 px-2 py-1 text-xs font-semibold shadow">
@@ -280,9 +274,7 @@ function OpenStreetMapView({
       </span>
 
       {puddles.map((puddle) => {
-        const point = latLngToPixel(puddle.latitude, puddle.longitude, zoom);
-        const left = 50 + ((point.x - centerPoint.x) / 768) * 100;
-        const top = 50 + ((point.y - centerPoint.y) / 768) * 100;
+        const point = latLngToMapPercent(center, puddle, meterRange);
         const isSelected = selectedId === puddle.id;
 
         return (
@@ -293,7 +285,7 @@ function OpenStreetMapView({
             className={`absolute h-9 w-9 -translate-x-1/2 -translate-y-full rounded-full border-2 text-xs font-bold text-white shadow-lg transition ${
               isSelected ? "scale-110 border-[#102033] bg-[#ff8a00]" : "border-white bg-[#2aa7c8]"
             }`}
-            style={{ left: `${left}%`, top: `${top}%` }}
+            style={{ left: `${point.left}%`, top: `${point.top}%` }}
             title={`${puddle.latitude}, ${puddle.longitude}`}
           >
             {sizeLabel(puddle.size)}
@@ -302,9 +294,9 @@ function OpenStreetMapView({
       })}
 
       <div className="absolute bottom-4 left-4 rounded-lg bg-white/95 p-3 text-xs text-[#486575] shadow">
-        <p className="font-semibold text-[#102033]">OpenStreetMap</p>
+        <p className="font-semibold text-[#102033]">Mizuta Local Map v2</p>
         <p className="mt-1 font-mono">
-          {center.lat.toFixed(5)}, {center.lng.toFixed(5)} / z{zoom}
+          {center.lat.toFixed(5)}, {center.lng.toFixed(5)} / {meterRange}m
         </p>
       </div>
       <div className="absolute bottom-4 right-4 flex overflow-hidden rounded-md bg-white shadow">
@@ -516,57 +508,20 @@ function ArOverlay({ onClose }: { onClose: () => void }) {
   );
 }
 
-function buildTiles(center: LatLng, zoom: number) {
-  const centerTile = latLngToTile(center.lat, center.lng, zoom);
-  const centerPixel = latLngToPixel(center.lat, center.lng, zoom);
-  const centerTilePixel = {
-    x: centerTile.x * 256,
-    y: centerTile.y * 256,
-  };
-  const offset = {
-    x: centerPixel.x - centerTilePixel.x,
-    y: centerPixel.y - centerTilePixel.y,
-  };
-  const tiles = [];
-
-  for (let row = -1; row <= 1; row += 1) {
-    for (let column = -1; column <= 1; column += 1) {
-      tiles.push({
-        x: centerTile.x + column,
-        y: centerTile.y + row,
-        z: zoom,
-        left: 256 + column * 256 - offset.x,
-        top: 256 + row * 256 - offset.y,
-      });
-    }
-  }
-
-  return tiles;
-}
-
-function latLngToTile(lat: number, lng: number, zoom: number) {
-  const scale = 2 ** zoom;
-  const x = Math.floor(((lng + 180) / 360) * scale);
-  const y = Math.floor(
-    ((1 - Math.log(Math.tan(toRadians(lat)) + 1 / Math.cos(toRadians(lat))) / Math.PI) / 2) * scale,
-  );
-
-  return { x, y };
-}
-
-function latLngToPixel(lat: number, lng: number, zoom: number) {
-  const scale = 256 * 2 ** zoom;
+function latLngToMapPercent(center: LatLng, puddle: Puddle, meterRange: number) {
+  const metersPerLat = 111_320;
+  const metersPerLng = Math.cos((center.lat * Math.PI) / 180) * 111_320;
+  const dx = (puddle.longitude - center.lng) * metersPerLng;
+  const dy = (puddle.latitude - center.lat) * metersPerLat;
 
   return {
-    x: ((lng + 180) / 360) * scale,
-    y:
-      ((1 - Math.log(Math.tan(toRadians(lat)) + 1 / Math.cos(toRadians(lat))) / Math.PI) / 2) *
-      scale,
+    left: clamp(50 + (dx / meterRange) * 50, 5, 95),
+    top: clamp(50 - (dy / meterRange) * 50, 8, 92),
   };
 }
 
-function toRadians(value: number) {
-  return (value * Math.PI) / 180;
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function formatDate(value: string) {
