@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f5fbff;
+  --foreground: #102033;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+@keyframes swim {
+  0% {
+    transform: translate3d(-20vw, 0, 0) scaleX(1);
+  }
+  48% {
+    transform: translate3d(78vw, -8vh, 0) scaleX(1);
+  }
+  50% {
+    transform: translate3d(80vw, -8vh, 0) scaleX(-1);
+  }
+  98% {
+    transform: translate3d(-18vw, 5vh, 0) scaleX(-1);
+  }
+  100% {
+    transform: translate3d(-20vw, 5vh, 0) scaleX(1);
+  }
+}
+
+.fish-swim {
+  animation: swim 8s ease-in-out infinite;
+}
