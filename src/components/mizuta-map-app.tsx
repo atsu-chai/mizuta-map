@@ -15,6 +15,7 @@ export function MizutaMapApp() {
   const [puddles, setPuddles] = useState<Puddle[]>([]);
   const [selectedPuddle, setSelectedPuddle] = useState<Puddle | null>(null);
   const [position, setPosition] = useState<LatLng>({ lat: defaultCenter.lat, lng: defaultCenter.lng });
+  const [hasUserLocation, setHasUserLocation] = useState(false);
   const [status, setStatus] = useState("水たまりデータを読み込み中...");
   const [submitStatus, setSubmitStatus] = useState("");
   const [showAr, setShowAr] = useState(false);
@@ -41,11 +42,17 @@ export function MizutaMapApp() {
   }, [loadPuddles]);
 
   useEffect(() => {
+    requestCurrentLocation({ silent: true });
+  }, []);
+
+  function requestCurrentLocation({ silent = false } = {}) {
     if (!navigator.geolocation) {
-      window.setTimeout(() => {
-        setStatus((current) => `${current} 現在地取得はこのブラウザで使えません。`);
-      }, 0);
+      setStatus((current) => `${current} 現在地取得はこのブラウザで使えません。`);
       return;
+    }
+
+    if (!silent) {
+      setStatus("現在地を取得しています...");
     }
 
     navigator.geolocation.getCurrentPosition(
@@ -55,13 +62,20 @@ export function MizutaMapApp() {
           lng: result.coords.longitude,
         };
         setPosition(nextPosition);
+        setHasUserLocation(true);
+        setStatus("現在地を中心に地図を表示しています。");
       },
       () => {
-        setStatus((current) => `${current} 現在地は許可されていないため東京駅周辺を表示します。`);
+        setHasUserLocation(false);
+        setStatus((current) =>
+          silent
+            ? `${current} 現在地は未取得です。ボタンから位置情報を許可してください。`
+            : "現在地を取得できませんでした。ブラウザの位置情報許可を確認してください。",
+        );
       },
-      { enableHighAccuracy: true, timeout: 8000 },
+      { enableHighAccuracy: true, maximumAge: 30_000, timeout: 10_000 },
     );
-  }, []);
+  }
 
   const selectedMapLink = useMemo(() => {
     if (!selectedPuddle) {
@@ -189,7 +203,9 @@ export function MizutaMapApp() {
               center={position}
               puddles={visiblePuddles}
               selectedId={selectedPuddle?.id}
+              hasUserLocation={hasUserLocation}
               onSelect={setSelectedPuddle}
+              onRequestLocation={() => requestCurrentLocation()}
             />
             <div className="absolute left-4 top-4 max-w-sm rounded-lg bg-white/95 p-3 text-sm shadow">
               <p className="font-semibold">地図ステータス</p>
@@ -247,12 +263,16 @@ function OpenStreetMapView({
   center,
   puddles,
   selectedId,
+  hasUserLocation,
   onSelect,
+  onRequestLocation,
 }: {
   center: LatLng;
   puddles: Puddle[];
   selectedId?: string;
+  hasUserLocation: boolean;
   onSelect: (puddle: Puddle) => void;
+  onRequestLocation: () => void;
 }) {
   const [zoom, setZoom] = useState(16);
   const meterRange = zoom === 18 ? 320 : zoom === 17 ? 520 : zoom === 16 ? 850 : 1400;
@@ -283,7 +303,7 @@ function OpenStreetMapView({
 
       <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-[#0d5268] shadow-lg" />
       <span className="absolute left-1/2 top-[calc(50%+16px)] -translate-x-1/2 rounded-full bg-white/90 px-2 py-1 text-xs font-semibold shadow">
-        現在地
+        {hasUserLocation ? "現在地" : "既定位置"}
       </span>
 
       {puddles.map((puddle) => {
@@ -313,6 +333,13 @@ function OpenStreetMapView({
         </p>
       </div>
       <div className="absolute bottom-4 right-4 flex overflow-hidden rounded-md bg-white shadow">
+        <button
+          type="button"
+          onClick={onRequestLocation}
+          className="border-r border-[#d7e8ee] px-3 py-2 text-sm font-semibold"
+        >
+          現在地
+        </button>
         <button
           type="button"
           onClick={() => setZoom((current) => Math.min(current + 1, 18))}
